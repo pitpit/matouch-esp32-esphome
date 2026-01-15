@@ -1,0 +1,133 @@
+packages:
+  - !include ./packages/matouch-esp32-s3-rotary-ips-display-st7701.yaml
+
+esphome:
+  name: demo-st7701
+  friendly_name: MaTouch ESP32-S3 Rotary IPS Display with Touch 2.1“ ST7701
+
+# Enable logging
+logger:
+  level: DEBUG
+
+binary_sensor:
+  # Copy of the button binary sensor to add on_press handlder and use encoder button as enter button
+  - platform: copy
+    id: matouch_button_copy
+    source_id: matouch_button
+    internal: true
+    on_press:
+      - lvgl.page.next:
+          animation: FADE_OUT
+          time: 80ms
+
+globals:
+  - id: last_x
+    type: int
+    initial_value: '-1'
+
+sensor:
+  - platform: copy
+    source_id: matouch_encoder
+    id: matouch_encoder_copy
+    internal: true
+    on_value:
+      then:
+        - lambda: |-
+            if (id(last_x) == -1) {
+                id(last_x) = (int)x;
+                return;
+            }
+            int delta = (int)x - id(last_x);
+            id(last_x) = (int)x;
+
+            ESP_LOGD("matouch", "encoder x=%.0f last_x=%d delta=%d", x, id(last_x), delta);
+
+            if (delta == 0) return;
+
+            lv_obj_t *active_scr = lv_scr_act();
+            lv_obj_t *arc = nullptr;
+            lv_obj_t *label = nullptr;
+
+            if (active_scr == id(second_screen).obj) {
+
+              ESP_LOGD("matouch", "screen 2 active");
+
+              arc = id(second_screen_arc);
+              label = id(second_screen_value_label);
+
+              if (arc != nullptr) {
+                  int current_val = lv_arc_get_value(arc);
+
+                  ESP_LOGD("matouch", "current_val=%.0f", current_val);
+
+                  int next_val = current_val - delta;
+                  int min_val = lv_arc_get_min_value(arc);
+                  int max_val = lv_arc_get_max_value(arc);
+                  if (next_val < min_val) next_val = min_val;
+                  if (next_val > max_val) next_val = max_val;
+
+                  ESP_LOGD("matouch", "encoder min_val=%d max_val=%d next_val=%.0f current_val=%.0f",  min_val, max_val, next_val, current_val);
+
+                  if (next_val != current_val) {
+                      lv_arc_set_value(arc, next_val);
+                      lv_event_send(arc, LV_EVENT_VALUE_CHANGED, NULL);
+                  }
+              }
+            }
+
+lvgl:
+  update_interval: 33ms
+  buffer_size: 100%
+  touchscreens:
+    - touchscreen_id : matouch_touchscreen
+  pages:
+    - id: first_screen
+      text_color: white
+      bg_color: black
+      widgets:
+        - label:
+            align: CENTER
+            text_font: montserrat_30
+            text: 'Press me'
+    - id: second_screen
+      text_color: white
+      bg_color: black
+      widgets:
+        - arc:
+            id: second_screen_arc
+            x: 0
+            y: 0
+            align: CENTER
+            width: 460
+            height: 460
+            min_value: 0
+            max_value: 10
+            value: 5
+            adjustable: true
+            start_angle: 130
+            end_angle: 50
+            arc_width: 40
+            arc_color: 0x111111
+            arc_rounded: true
+            indicator:
+              arc_width: 40
+              arc_rounded: true
+              arc_opa: 100%
+              arc_color: red
+            knob:
+              bg_color: white
+            on_value:
+              - logger.log:
+                  level: INFO
+                  format: "Setting value to %.0f"
+                  args: [ 'x' ]
+              - lvgl.label.update:
+                  id: second_screen_value_label
+                  text: !lambda 'return std::to_string((int)x);'
+        - label:
+            id: second_screen_value_label
+            align: CENTER
+            y: 0
+            text_font: montserrat_48
+            text: "5"
+            text_color: white
