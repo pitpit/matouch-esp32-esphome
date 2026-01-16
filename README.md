@@ -4,9 +4,9 @@ This project provides [ESPHome](https://esphome.io) support for various MaTouch 
 
 ## Supported Devices
 
-| Device | Status |
-|--------|--------|
-| [MaTouch ESP32-S3 Rotary IPS Display with Touch 2.1" ST7701](https://www.makerfabs.com/matouch-esp32-s3-rotary-ips-display-with-touch-2-1-st7701.html) | ✅ Supported |
+| Device | Backlight | Display | Touchscreen | Rotary Enc. | Idle Screen | Deep Sleep |
+|--------|-----------|---------|-------------|-------------|-------|------------|
+| [MaTouch ESP32-S3 Rotary IPS Display with Touch 2.1" ST7701](https://www.makerfabs.com/matouch-esp32-s3-rotary-ips-display-with-touch-2-1-st7701.html) | ✅ Supported | ✅ Supported |  ✅ Supported | ✅ Supported | ✅ Supported |✅ Supported |
 | [MaTouch ESP32-S3 Rotary IPS Display 1.28" GC9A01](https://www.makerfabs.com/matouch-esp32-s3-rotaryips-display1-28-gc9a01.html) | 🚧 In Progress |
 
 ## Usage

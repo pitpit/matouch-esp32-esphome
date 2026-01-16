@@ -83,6 +83,15 @@ substitutions:
   RGB_VSYNC_PULSE_WIDTH: "8"
   RGB_VSYNC_BACK_PORCH: "20"
 
+  # Touchscreen Configuration
+  TOUCH_UPDATE_INTERVAL: "50ms"
+
+  # Deep Sleep Configuration
+  # defines the timeout in milliseconds before entering deep sleep
+  # 300000 ms = 5 minutes
+  DEEP_SLEEP_TIMEOUT_MS: "300000"
+  BACKLIGHT_TIMEOUT_MS: "60000"
+
 # please add the following to your esphome section to forces the build system
 # to generate a Bootloader specifically for "Quad Flash + Octal PSRAM" (qio_opi).
 #
@@ -229,6 +238,9 @@ binary_sensor:
         input: true
         pullup: true
       inverted: true
+      allow_other_uses: true
+    on_press:
+      - script.execute: activity_detected
 
 sensor:
   - platform: rotary_encoder
@@ -245,6 +257,8 @@ sensor:
       mode:
         input: true
         pullup: true
+    on_value:
+      - script.execute: activity_detected
 
 i2c:
   id: bus_a
@@ -255,6 +269,63 @@ i2c:
 touchscreen:
   id: matouch_touchscreen
   platform: cst816
-  update_interval: 50ms
+  update_interval: ${TOUCH_UPDATE_INTERVAL}
   i2c_id: bus_a
   address: ${TOUCH_I2C_ADDR}
+  on_touch:
+    - script.execute: activity_detected
+
+## Deep Sleep
+
+script:
+  - id: activity_detected
+    mode: restart
+    then:
+      - lambda: id(last_activity) = millis();
+      - output.turn_on: matouch_backlight_pwm
+
+globals:
+  - id: last_activity
+    type: uint32_t
+    initial_value: '0'
+
+esphome:
+  on_boot:
+    priority: 600
+    then:
+      # Release the hold on the backlight pin if it was set during deep sleep
+      - lambda: gpio_hold_dis((gpio_num_t)${TFT_BL});
+      - script.execute: activity_detected
+
+deep_sleep:
+  id: deep_sleep_component
+  wakeup_pin:
+    number: ${BUTTON_PIN}
+    inverted: true
+    mode:
+      input: true
+      pullup: true
+    allow_other_uses: true
+
+interval:
+  - interval: 10s
+    then:
+      - if:
+          condition:
+            # Check for Deep Sleep Timeout (5 min)
+            lambda: 'return (millis() - id(last_activity)) > ${DEEP_SLEEP_TIMEOUT_MS};'
+          then:
+            - logger.log: "Deep Sleep Timeout reached."
+            - output.turn_off: matouch_backlight_pwm
+            # Force the LED pin to hold its low state during deep sleep
+            - lambda: gpio_hold_en((gpio_num_t)${TFT_BL});
+            - delay: 1s
+            - deep_sleep.enter: deep_sleep_component
+          else:
+            - if:
+                condition:
+                  # Check for Backlight Timeout (1 min)
+                  lambda: 'return (millis() - id(last_activity)) > ${BACKLIGHT_TIMEOUT_MS};'
+                then:
+                  - logger.log: "Backlight Timeout reached."
+                  - output.turn_off: matouch_backlight_pwm
