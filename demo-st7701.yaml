@@ -1,3 +1,8 @@
+substitutions:
+  initial_value: 5
+  min_value: 0
+  max_value: 10
+
 packages:
   - !include ./packages/matouch-esp32-s3-rotary-ips-display-st7701.yaml
 
@@ -20,10 +25,20 @@ binary_sensor:
           animation: FADE_OUT
           time: 80ms
 
-globals:
-  - id: last_x
-    type: int
-    initial_value: '-1'
+number:
+  - platform: template
+    id: arc_value
+    internal: true
+    min_value: ${min_value}
+    max_value: ${max_value}
+    step: 1
+    initial_value: ${initial_value}
+    optimistic: true
+    on_value:
+      then:
+        - lvgl.arc.update:
+            id: second_screen_arc
+            value: !lambda 'return x;'
 
 sensor:
   - platform: copy
@@ -33,56 +48,17 @@ sensor:
     on_value:
       then:
         - lambda: |-
-            // Lambda handles encoder rotation to update the arc on the second screen.
-            // 'last_x' stores the previous encoder value; initialized to -1 to detect the first reading.
-            if (id(last_x) == -1) {
-                // First encoder event: establish baseline and ignore this delta.
-                id(last_x) = (int)x;
-                return;
-            }
-            // Compute delta since last reading and update last_x.
-            int delta = (int)x - id(last_x);
-            id(last_x) = (int)x;
+            static int last = 0;
+            int delta = (int)x - last;
+            last = (int)x;
 
-            ESP_LOGD("matouch", "encoder x=%.0f last_x=%d delta=%d", x, id(last_x), delta);
+            auto v = id(arc_value).state + delta;
+            if (v < ${min_value}) v = ${min_value};
+            if (v > ${max_value}) v = ${max_value};
 
-            if (delta == 0) return; // No change, nothing to do.
+            ESP_LOGD("encoder", "raw=%d delta=%d v=%d", (int)x, delta, (int)v);
 
-            // Get the currently active LVGL screen and prepare pointers for widgets we may modify.
-            lv_obj_t *active_scr = lv_scr_act();
-            lv_obj_t *arc = nullptr;
-            lv_obj_t *label = nullptr;
-
-            // Only handle changes when the second screen is active.
-            if (active_scr == id(second_screen).obj) {
-
-              ESP_LOGD("matouch", "screen 2 active");
-
-              arc = id(second_screen_arc);
-              label = id(second_screen_value_label);
-
-              if (arc != nullptr) {
-                  // Read current arc value and compute the next value.
-                  int current_val = lv_arc_get_value(arc);
-
-                  ESP_LOGD("matouch", "current_val=%.0f", current_val);
-
-                  // Note: subtracting delta so encoder direction matches UI expectations.
-                  int next_val = current_val - delta;
-                  int min_val = lv_arc_get_min_value(arc);
-                  int max_val = lv_arc_get_max_value(arc);
-                  if (next_val < min_val) next_val = min_val;
-                  if (next_val > max_val) next_val = max_val;
-
-                  ESP_LOGD("matouch", "encoder min_val=%d max_val=%d next_val=%.0f current_val=%.0f",  min_val, max_val, next_val, current_val);
-
-                  // Only update the widget and trigger its value change event if the value actually changed.
-                  if (next_val != current_val) {
-                      lv_arc_set_value(arc, next_val);
-                      lv_event_send(arc, LV_EVENT_VALUE_CHANGED, NULL);
-                  }
-              }
-            }
+            id(arc_value).publish_state(v);
 
 lvgl:
   update_interval: 33ms
@@ -109,9 +85,9 @@ lvgl:
             align: CENTER
             width: 460
             height: 460
-            min_value: 0
-            max_value: 10
-            value: 5
+            min_value: ${min_value}
+            max_value: ${max_value}
+            value: ${initial_value}
             adjustable: true
             start_angle: 130
             end_angle: 50
@@ -138,5 +114,5 @@ lvgl:
             align: CENTER
             y: 0
             text_font: montserrat_48
-            text: "5"
+            text: "${initial_value}"
             text_color: white

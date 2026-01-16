@@ -234,13 +234,14 @@ sensor:
   - platform: rotary_encoder
     id: matouch_encoder
     name: "Rotary Encoder"
+    restore_mode: ALWAYS_ZERO
     pin_a:
-      number: ${ENCODER_CLK}
+      number:   ${ENCODER_DT}
       mode:
         input: true
         pullup: true
     pin_b:
-      number: ${ENCODER_DT}
+      number: ${ENCODER_CLK}
       mode:
         input: true
         pullup: true
